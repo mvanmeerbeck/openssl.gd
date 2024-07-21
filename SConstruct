@@ -6,7 +6,13 @@ from pathlib import Path
 env = SConscript("godot-cpp/SConstruct")
 
 # Add source files.
+env.Append(CPPPATH=["/opt/homebrew/opt/openssl@3.3/include"])
+env.Append(LIBPATH=["/opt/homebrew/opt/openssl@3.3/lib"])
 env.Append(CPPPATH=["src/"])
+
+# Ajoute les bibliothèques OpenSSL à lier
+env.Append(LIBS=["ssl", "crypto"])
+
 sources = Glob("src/*.cpp")
 
 # Find gdextension path even if the directory or extension is renamed (e.g. project/addons/example/example.gdextension).

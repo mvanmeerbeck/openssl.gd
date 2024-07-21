@@ -21,4 +21,5 @@ public:
 	~MySingleton();
 
 	void hello_singleton();
+	PackedByteArray hashKeccak256(const String& data);
 };
