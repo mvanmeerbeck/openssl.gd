@@ -50,11 +50,7 @@ PackedByteArray MySingleton::hashKeccak256(const String& data) {
 
     // Tente de charger dynamiquement l'algorithme Keccak256
     // Remplacez "KECCAK256" par le nom correct si différent
-    md = EVP_MD_fetch(NULL, "KECCAK256", NULL);
-    if (!md) {
-        // Si Keccak256 n'est pas disponible, utilisez SHA3-256 comme fallback
-        md = EVP_sha3_256();
-    }
+    md = EVP_MD_fetch(NULL, "KECCAK-256", NULL);
 
     mdctx = EVP_MD_CTX_new();
     if (!mdctx || !md) {
