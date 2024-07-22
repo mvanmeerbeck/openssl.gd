@@ -15,6 +15,9 @@ void OpenSSL::_bind_methods()
 {
 	ClassDB::bind_method(D_METHOD("keccak256", "data"), &OpenSSL::keccak256);
     ClassDB::bind_method(D_METHOD("hmac_sha512", "data"), &OpenSSL::hmac_sha512);
+    ClassDB::bind_method(D_METHOD("pbkdf2_hmac_sha512", "password", "salt", "iterations", "key_length"), &OpenSSL::pbkdf2_hmac_sha512);
+    ClassDB::bind_method(D_METHOD("mod", "number_bytes", "mod_bytes"), &OpenSSL::mod);
+    ClassDB::bind_method(D_METHOD("add_mod", "a_bytes", "b_bytes", "mod_bytes"), &OpenSSL::add_mod);
 }
 
 OpenSSL *OpenSSL::get_singleton()
@@ -76,17 +79,102 @@ PackedByteArray OpenSSL::keccak256(const String& data) {
     return result;
 }
 
-PackedByteArray OpenSSL::hmac_sha512(const String& data, const String& key) {
+PackedByteArray OpenSSL::hmac_sha512(const PackedByteArray& data, const PackedByteArray& key) {
     const EVP_MD* md = EVP_sha512();
     unsigned int len = EVP_MD_size(md);
     std::vector<unsigned char> hmac_value(len);
 
-    HMAC(md, key.utf8().get_data(), key.length(), reinterpret_cast<const unsigned char*>(data.utf8().get_data()), data.length(), hmac_value.data(), &len);
+    HMAC(md, key.ptr(), key.size(), data.ptr(), data.size(), hmac_value.data(), &len);
 
     PackedByteArray result;
-    for (size_t i = 0; i < len; ++i) {
-        result.append(hmac_value[i]);
-    }
+    result.resize(len);
+    memcpy(result.ptrw(), hmac_value.data(), len);
 
     return result;
+}
+
+PackedByteArray OpenSSL::pbkdf2_hmac_sha512(const PackedByteArray& password, const PackedByteArray& salt, int iterations, int key_length) {
+    PackedByteArray key;
+    key.resize(key_length);
+    const unsigned char* password_data = password.ptr();
+    const unsigned char* salt_data = salt.ptr();
+    unsigned char* key_data = key.ptrw();
+
+    int success = PKCS5_PBKDF2_HMAC(reinterpret_cast<const char*>(password_data), password.size(), reinterpret_cast<const unsigned char*>(salt_data), salt.size(), iterations, EVP_sha512(), key_length, key_data);
+
+    if (!success) {
+        // Handle error: PKCS5_PBKDF2_HMAC failed
+        key.resize(0); // Clear the key if operation failed
+    }
+
+    return key;
+}
+
+PackedByteArray OpenSSL::mod(PackedByteArray number_bytes, PackedByteArray mod_bytes) {
+    BIGNUM *bn_number = BN_new();
+    BIGNUM *bn_mod = BN_new();
+    BIGNUM *result = BN_new();
+    BN_CTX *ctx = BN_CTX_new();
+
+    // Convertit PackedByteArray en BIGNUM
+    BN_bin2bn(number_bytes.ptr(), number_bytes.size(), bn_number);
+    BN_bin2bn(mod_bytes.ptr(), mod_bytes.size(), bn_mod);
+
+    // Effectue l'opération de modulo
+    BN_mod(result, bn_number, bn_mod, ctx);
+
+    // Vérifie si le résultat est 0
+    if (BN_is_zero(result)) {
+        // Nettoyage
+        BN_free(bn_number);
+        BN_free(bn_mod);
+        BN_free(result);
+        BN_CTX_free(ctx);
+
+        // Retourne un PackedByteArray contenant un seul octet de valeur 0
+        PackedByteArray zero_array;
+        zero_array.append(0);
+        return zero_array;
+    }
+
+    // Convertit le résultat en PackedByteArray
+    int num_bytes = BN_num_bytes(result);
+    PackedByteArray result_array;
+    result_array.resize(num_bytes);
+    BN_bn2bin(result, result_array.ptrw());
+
+    // Nettoyage
+    BN_free(bn_number);
+    BN_free(bn_mod);
+    BN_free(result);
+    BN_CTX_free(ctx);
+
+    return result_array;
+}
+
+PackedByteArray OpenSSL::add_mod(PackedByteArray a_bytes, PackedByteArray b_bytes, PackedByteArray mod_bytes) {
+    BIGNUM *a = BN_new();
+    BIGNUM *b = BN_new();
+    BIGNUM *mod = BN_new();
+    BIGNUM *result = BN_new();
+    BN_CTX *ctx = BN_CTX_new();
+
+    BN_bin2bn(a_bytes.ptr(), a_bytes.size(), a);
+    BN_bin2bn(b_bytes.ptr(), b_bytes.size(), b);
+    BN_bin2bn(mod_bytes.ptr(), mod_bytes.size(), mod);
+
+    BN_mod_add(result, a, b, mod, ctx);
+
+    int num_bytes = BN_num_bytes(result);
+    PackedByteArray result_array;
+    result_array.resize(num_bytes);
+    BN_bn2bin(result, result_array.ptrw());
+
+    BN_free(a);
+    BN_free(b);
+    BN_free(mod);
+    BN_free(result);
+    BN_CTX_free(ctx);
+
+    return result_array;
 }

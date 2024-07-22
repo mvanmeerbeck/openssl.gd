@@ -21,5 +21,8 @@ public:
 	~OpenSSL();
 
 	PackedByteArray keccak256(const String& data);
-	PackedByteArray hmac_sha512(const String& data, const String& key);
+	PackedByteArray hmac_sha512(const PackedByteArray& data, const PackedByteArray& key);
+	PackedByteArray pbkdf2_hmac_sha512(const PackedByteArray& password, const PackedByteArray& salt, int iterations, int key_length);
+	PackedByteArray mod(PackedByteArray number_bytes, PackedByteArray mod_bytes);
+	PackedByteArray add_mod(PackedByteArray a_bytes, PackedByteArray b_bytes, PackedByteArray mod_bytes);
 };
