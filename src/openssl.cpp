@@ -1,4 +1,4 @@
-#include "my_singleton.hpp"
+#include "openssl.hpp"
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <godot_cpp/variant/packed_byte_array.hpp>
@@ -6,23 +6,25 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <openssl/sha.h>
+#include <openssl/provider.h>
+
 
 using namespace godot;
 
-MySingleton *MySingleton::singleton = nullptr;
+OpenSSL *OpenSSL::singleton = nullptr;
 
-void MySingleton::_bind_methods()
+void OpenSSL::_bind_methods()
 {
-	ClassDB::bind_method(D_METHOD("hello_singleton"), &MySingleton::hello_singleton);
-	ClassDB::bind_method(D_METHOD("hashKeccak256", "data"), &MySingleton::hashKeccak256);
+	ClassDB::bind_method(D_METHOD("keccak256", "data"), &OpenSSL::keccak256);
+    ClassDB::bind_method(D_METHOD("hmac_sha512", "data"), &OpenSSL::hmac_sha512);
 }
 
-MySingleton *MySingleton::get_singleton()
+OpenSSL *OpenSSL::get_singleton()
 {
 	return singleton;
 }
 
-MySingleton::MySingleton()
+OpenSSL::OpenSSL()
 {
 	ERR_FAIL_COND(singleton != nullptr);
 	singleton = this;
@@ -31,18 +33,13 @@ MySingleton::MySingleton()
     OpenSSL_add_all_algorithms();	
 }
 
-MySingleton::~MySingleton()
+OpenSSL::~OpenSSL()
 {
 	ERR_FAIL_COND(singleton != this);
 	singleton = nullptr;
 }
 
-void MySingleton::hello_singleton()
-{
-	UtilityFunctions::print("Hello GDExtension Singleton!");
-}
-
-PackedByteArray MySingleton::hashKeccak256(const String& data) {
+PackedByteArray OpenSSL::keccak256(const String& data) {
     EVP_MD_CTX* mdctx;
     const EVP_MD* md;
     std::vector<unsigned char> md_value(EVP_MAX_MD_SIZE);
@@ -76,6 +73,21 @@ PackedByteArray MySingleton::hashKeccak256(const String& data) {
     PackedByteArray result;
     for (size_t i = 0; i < md_len; ++i) {
         result.append(md_value[i]);
+    }
+
+    return result;
+}
+
+PackedByteArray OpenSSL::hmac_sha512(const String& data, const String& key) {
+    const EVP_MD* md = EVP_sha512();
+    unsigned int len = EVP_MD_size(md);
+    std::vector<unsigned char> hmac_value(len);
+
+    HMAC(md, key.utf8().get_data(), key.length(), reinterpret_cast<const unsigned char*>(data.utf8().get_data()), data.length(), hmac_value.data(), &len);
+
+    PackedByteArray result;
+    for (size_t i = 0; i < len; ++i) {
+        result.append(hmac_value[i]);
     }
 
     return result;

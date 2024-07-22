@@ -2,5 +2,5 @@ extends Node
 
 func _ready() -> void:
 	print("Hello GDScript!")
-	MySingleton.hello_singleton()
-	print(MySingleton.hashKeccak256('toto').hex_encode())
+	print(OpenSSL.keccak256('toto').hex_encode())
+	print(OpenSSL.hmac_sha512("VotreMessage", "VotreCleSecrete").hex_encode())
