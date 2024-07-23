@@ -6,6 +6,9 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <openssl/sha.h>
+#include <openssl/ec.h>
+#include <openssl/obj_mac.h>
+#include <openssl/bn.h>
 
 using namespace godot;
 
@@ -18,6 +21,7 @@ void OpenSSL::_bind_methods()
     ClassDB::bind_method(D_METHOD("pbkdf2_hmac_sha512", "password", "salt", "iterations", "key_length"), &OpenSSL::pbkdf2_hmac_sha512);
     ClassDB::bind_method(D_METHOD("mod", "number_bytes", "mod_bytes"), &OpenSSL::mod);
     ClassDB::bind_method(D_METHOD("add_mod", "a_bytes", "b_bytes", "mod_bytes"), &OpenSSL::add_mod);
+    ClassDB::bind_method(D_METHOD("calculate_public_key", "private_key_bytes"), &OpenSSL::calculate_public_key);
 }
 
 OpenSSL *OpenSSL::get_singleton()
@@ -177,4 +181,82 @@ PackedByteArray OpenSSL::add_mod(PackedByteArray a_bytes, PackedByteArray b_byte
     BN_CTX_free(ctx);
 
     return result_array;
+}
+
+PackedByteArray OpenSSL::calculate_public_key(const PackedByteArray &private_key_bytes) {
+    EC_KEY *ec_key = EC_KEY_new_by_curve_name(NID_secp256k1);
+    if (!ec_key) {
+        // Gestion des erreurs
+        return PackedByteArray();
+    }
+
+    BIGNUM *priv_key_bn = BN_bin2bn(private_key_bytes.ptr(), private_key_bytes.size(), nullptr);
+    if (!priv_key_bn) {
+        // Gestion des erreurs
+        EC_KEY_free(ec_key);
+        return PackedByteArray();
+    }
+
+    if (!EC_KEY_set_private_key(ec_key, priv_key_bn)) {
+        // Gestion des erreurs
+        BN_free(priv_key_bn);
+        EC_KEY_free(ec_key);
+        return PackedByteArray();
+    }
+
+    const EC_GROUP *group = EC_KEY_get0_group(ec_key);
+    EC_POINT *pub_key_point = EC_POINT_new(group);
+    if (!pub_key_point) {
+        // Gestion des erreurs
+        BN_free(priv_key_bn);
+        EC_KEY_free(ec_key);
+        return PackedByteArray();
+    }
+
+    if (!EC_POINT_mul(group, pub_key_point, priv_key_bn, nullptr, nullptr, nullptr)) {
+        // Gestion des erreurs
+        EC_POINT_free(pub_key_point);
+        BN_free(priv_key_bn);
+        EC_KEY_free(ec_key);
+        return PackedByteArray();
+    }
+
+    if (!EC_KEY_set_public_key(ec_key, pub_key_point)) {
+        // Gestion des erreurs
+        EC_POINT_free(pub_key_point);
+        BN_free(priv_key_bn);
+        EC_KEY_free(ec_key);
+        return PackedByteArray();
+    }
+
+    // Obtenir la longueur de la clé publique compressée
+    size_t compressed_pub_key_len = EC_POINT_point2oct(group, pub_key_point, POINT_CONVERSION_COMPRESSED, nullptr, 0, nullptr);
+    if (compressed_pub_key_len == 0) {
+        // Gestion des erreurs
+        EC_POINT_free(pub_key_point);
+        BN_free(priv_key_bn);
+        EC_KEY_free(ec_key);
+        return PackedByteArray();
+    }
+
+    // Allouer de la mémoire pour la clé publique compressée
+    PackedByteArray pub_key_bytes;
+    pub_key_bytes.resize(compressed_pub_key_len);
+    unsigned char *pub_key_data = pub_key_bytes.ptrw();
+
+    // Remplir la clé publique compressée
+    if (EC_POINT_point2oct(group, pub_key_point, POINT_CONVERSION_COMPRESSED, pub_key_data, compressed_pub_key_len, nullptr) != compressed_pub_key_len) {
+        // Gestion des erreurs
+        EC_POINT_free(pub_key_point);
+        BN_free(priv_key_bn);
+        EC_KEY_free(ec_key);
+        return PackedByteArray();
+    }
+
+    // Nettoyage
+    EC_POINT_free(pub_key_point);
+    BN_free(priv_key_bn);
+    EC_KEY_free(ec_key);
+
+    return pub_key_bytes;
 }
