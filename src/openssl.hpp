@@ -26,4 +26,5 @@ public:
 	PackedByteArray mod(PackedByteArray number_bytes, PackedByteArray mod_bytes);
 	PackedByteArray add_mod(PackedByteArray a_bytes, PackedByteArray b_bytes, PackedByteArray mod_bytes);
 	PackedByteArray calculate_public_key(const PackedByteArray &private_key_bytes);
+	PackedByteArray sign(const PackedByteArray &priv_key_bytes, const PackedByteArray &data);
 };

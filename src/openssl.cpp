@@ -22,6 +22,7 @@ void OpenSSL::_bind_methods()
     ClassDB::bind_method(D_METHOD("mod", "number_bytes", "mod_bytes"), &OpenSSL::mod);
     ClassDB::bind_method(D_METHOD("add_mod", "a_bytes", "b_bytes", "mod_bytes"), &OpenSSL::add_mod);
     ClassDB::bind_method(D_METHOD("calculate_public_key", "private_key_bytes"), &OpenSSL::calculate_public_key);
+    ClassDB::bind_method(D_METHOD("sign", "priv_key_bytes", "data"), &OpenSSL::sign);
 }
 
 OpenSSL *OpenSSL::get_singleton()
@@ -259,4 +260,51 @@ PackedByteArray OpenSSL::calculate_public_key(const PackedByteArray &private_key
     EC_KEY_free(ec_key);
 
     return pub_key_bytes;
+}
+
+PackedByteArray OpenSSL::sign(const PackedByteArray &priv_key_bytes, const PackedByteArray &data) {
+    // Initialisation de la courbe elliptique
+    EC_KEY *ec_key = EC_KEY_new_by_curve_name(NID_secp256k1);
+    if (!ec_key) {
+        // Gestion des erreurs
+        return PackedByteArray();
+    }
+
+    // Conversion de la clé privée en BIGNUM
+    BIGNUM *priv_key_bn = BN_bin2bn(priv_key_bytes.ptr(), priv_key_bytes.size(), nullptr);
+    if (!priv_key_bn) {
+        // Gestion des erreurs
+        EC_KEY_free(ec_key);
+        return PackedByteArray();
+    }
+
+    // Attribution de la clé privée à la structure EC_KEY
+    if (EC_KEY_set_private_key(ec_key, priv_key_bn) != 1) {
+        // Gestion des erreurs
+        BN_free(priv_key_bn);
+        EC_KEY_free(ec_key);
+        return PackedByteArray();
+    }
+
+    // Signer les données
+    unsigned int sig_len = ECDSA_size(ec_key);
+    PackedByteArray signature;
+    signature.resize(sig_len);
+    unsigned char *sig_data = signature.ptrw();
+
+    if (ECDSA_sign(0, data.ptr(), data.size(), sig_data, &sig_len, ec_key) != 1) {
+        // Gestion des erreurs
+        BN_free(priv_key_bn);
+        EC_KEY_free(ec_key);
+        return PackedByteArray();
+    }
+
+    // Redimensionner la signature à la taille réelle
+    signature.resize(sig_len);
+
+    // Nettoyage
+    BN_free(priv_key_bn);
+    EC_KEY_free(ec_key);
+
+    return signature;
 }
