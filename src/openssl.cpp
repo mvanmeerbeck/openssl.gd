@@ -9,6 +9,8 @@
 #include <openssl/ec.h>
 #include <openssl/obj_mac.h>
 #include <openssl/bn.h>
+#include <secp256k1.h>
+#include <secp256k1_recovery.h>
 
 using namespace godot;
 
@@ -16,7 +18,7 @@ OpenSSL *OpenSSL::singleton = nullptr;
 
 void OpenSSL::_bind_methods()
 {
-	ClassDB::bind_method(D_METHOD("keccak256", "data"), &OpenSSL::keccak256);
+    ClassDB::bind_method(D_METHOD("keccak256", "data"), &OpenSSL::keccak256);
     ClassDB::bind_method(D_METHOD("hmac_sha512", "data"), &OpenSSL::hmac_sha512);
     ClassDB::bind_method(D_METHOD("pbkdf2_hmac_sha512", "password", "salt", "iterations", "key_length"), &OpenSSL::pbkdf2_hmac_sha512);
     ClassDB::bind_method(D_METHOD("mod", "number_bytes", "mod_bytes"), &OpenSSL::mod);
@@ -27,27 +29,28 @@ void OpenSSL::_bind_methods()
 
 OpenSSL *OpenSSL::get_singleton()
 {
-	return singleton;
+    return singleton;
 }
 
 OpenSSL::OpenSSL()
 {
-	ERR_FAIL_COND(singleton != nullptr);
-	singleton = this;
+    ERR_FAIL_COND(singleton != nullptr);
+    singleton = this;
 
     SSL_load_error_strings();
-    OpenSSL_add_all_algorithms();	
+    OpenSSL_add_all_algorithms();
 }
 
 OpenSSL::~OpenSSL()
 {
-	ERR_FAIL_COND(singleton != this);
-	singleton = nullptr;
+    ERR_FAIL_COND(singleton != this);
+    singleton = nullptr;
 }
 
-PackedByteArray OpenSSL::keccak256(const String& data) {
-    EVP_MD_CTX* mdctx;
-    const EVP_MD* md;
+PackedByteArray OpenSSL::keccak256(const PackedByteArray &data)
+{
+    EVP_MD_CTX *mdctx;
+    const EVP_MD *md;
     std::vector<unsigned char> md_value(EVP_MAX_MD_SIZE);
     unsigned int md_len;
 
@@ -56,36 +59,43 @@ PackedByteArray OpenSSL::keccak256(const String& data) {
     md = EVP_MD_fetch(NULL, "KECCAK-256", NULL);
 
     mdctx = EVP_MD_CTX_new();
-    if (!mdctx || !md) {
+    if (!mdctx || !md)
+    {
         // Gérer l'erreur, libérer les ressources si nécessaire
-        if (md) EVP_MD_free((EVP_MD*)md); // Libérer l'algorithme si chargé
-        return PackedByteArray(); // Retourner un tableau vide ou gérer l'erreur autrement
+        if (md)
+            EVP_MD_free((EVP_MD *)md); // Libérer l'algorithme si chargé
+        return PackedByteArray();      // Retourner un tableau vide ou gérer l'erreur autrement
     }
 
     if (1 != EVP_DigestInit_ex(mdctx, md, NULL) ||
-        1 != EVP_DigestUpdate(mdctx, data.utf8().get_data(), data.length()) ||
-        1 != EVP_DigestFinal_ex(mdctx, md_value.data(), &md_len)) {
+        1 != EVP_DigestUpdate(mdctx, data.ptr(), data.size()) ||
+        1 != EVP_DigestFinal_ex(mdctx, md_value.data(), &md_len))
+    {
         // Gérer l'erreur, libérer les ressources
         EVP_MD_CTX_free(mdctx);
-        if (md) EVP_MD_free((EVP_MD*)md); // Libérer l'algorithme si chargé
-        return PackedByteArray(); // Retourner un tableau vide ou gérer l'erreur autrement
+        if (md)
+            EVP_MD_free((EVP_MD *)md); // Libérer l'algorithme si chargé
+        return PackedByteArray();      // Retourner un tableau vide ou gérer l'erreur autrement
     }
 
     EVP_MD_CTX_free(mdctx);
-    if (md) EVP_MD_free((EVP_MD*)md); // Libérer l'algorithme après utilisation
+    if (md)
+        EVP_MD_free((EVP_MD *)md); // Libérer l'algorithme après utilisation
 
     md_value.resize(md_len); // Ajuste la taille du vecteur au résultat réel
 
     PackedByteArray result;
-    for (size_t i = 0; i < md_len; ++i) {
+    for (size_t i = 0; i < md_len; ++i)
+    {
         result.append(md_value[i]);
     }
 
     return result;
 }
 
-PackedByteArray OpenSSL::hmac_sha512(const PackedByteArray& data, const PackedByteArray& key) {
-    const EVP_MD* md = EVP_sha512();
+PackedByteArray OpenSSL::hmac_sha512(const PackedByteArray &data, const PackedByteArray &key)
+{
+    const EVP_MD *md = EVP_sha512();
     unsigned int len = EVP_MD_size(md);
     std::vector<unsigned char> hmac_value(len);
 
@@ -98,16 +108,18 @@ PackedByteArray OpenSSL::hmac_sha512(const PackedByteArray& data, const PackedBy
     return result;
 }
 
-PackedByteArray OpenSSL::pbkdf2_hmac_sha512(const PackedByteArray& password, const PackedByteArray& salt, int iterations, int key_length) {
+PackedByteArray OpenSSL::pbkdf2_hmac_sha512(const PackedByteArray &password, const PackedByteArray &salt, int iterations, int key_length)
+{
     PackedByteArray key;
     key.resize(key_length);
-    const unsigned char* password_data = password.ptr();
-    const unsigned char* salt_data = salt.ptr();
-    unsigned char* key_data = key.ptrw();
+    const unsigned char *password_data = password.ptr();
+    const unsigned char *salt_data = salt.ptr();
+    unsigned char *key_data = key.ptrw();
 
-    int success = PKCS5_PBKDF2_HMAC(reinterpret_cast<const char*>(password_data), password.size(), reinterpret_cast<const unsigned char*>(salt_data), salt.size(), iterations, EVP_sha512(), key_length, key_data);
+    int success = PKCS5_PBKDF2_HMAC(reinterpret_cast<const char *>(password_data), password.size(), reinterpret_cast<const unsigned char *>(salt_data), salt.size(), iterations, EVP_sha512(), key_length, key_data);
 
-    if (!success) {
+    if (!success)
+    {
         // Handle error: PKCS5_PBKDF2_HMAC failed
         key.resize(0); // Clear the key if operation failed
     }
@@ -115,7 +127,8 @@ PackedByteArray OpenSSL::pbkdf2_hmac_sha512(const PackedByteArray& password, con
     return key;
 }
 
-PackedByteArray OpenSSL::mod(PackedByteArray number_bytes, PackedByteArray mod_bytes) {
+PackedByteArray OpenSSL::mod(PackedByteArray number_bytes, PackedByteArray mod_bytes)
+{
     BIGNUM *bn_number = BN_new();
     BIGNUM *bn_mod = BN_new();
     BIGNUM *result = BN_new();
@@ -129,7 +142,8 @@ PackedByteArray OpenSSL::mod(PackedByteArray number_bytes, PackedByteArray mod_b
     BN_mod(result, bn_number, bn_mod, ctx);
 
     // Vérifie si le résultat est 0
-    if (BN_is_zero(result)) {
+    if (BN_is_zero(result))
+    {
         // Nettoyage
         BN_free(bn_number);
         BN_free(bn_mod);
@@ -157,7 +171,8 @@ PackedByteArray OpenSSL::mod(PackedByteArray number_bytes, PackedByteArray mod_b
     return result_array;
 }
 
-PackedByteArray OpenSSL::add_mod(PackedByteArray a_bytes, PackedByteArray b_bytes, PackedByteArray mod_bytes) {
+PackedByteArray OpenSSL::add_mod(PackedByteArray a_bytes, PackedByteArray b_bytes, PackedByteArray mod_bytes)
+{
     BIGNUM *a = BN_new();
     BIGNUM *b = BN_new();
     BIGNUM *mod = BN_new();
@@ -184,21 +199,25 @@ PackedByteArray OpenSSL::add_mod(PackedByteArray a_bytes, PackedByteArray b_byte
     return result_array;
 }
 
-PackedByteArray OpenSSL::calculate_public_key(const PackedByteArray &private_key_bytes) {
+PackedByteArray OpenSSL::calculate_public_key(const PackedByteArray &private_key_bytes)
+{
     EC_KEY *ec_key = EC_KEY_new_by_curve_name(NID_secp256k1);
-    if (!ec_key) {
+    if (!ec_key)
+    {
         // Gestion des erreurs
         return PackedByteArray();
     }
 
     BIGNUM *priv_key_bn = BN_bin2bn(private_key_bytes.ptr(), private_key_bytes.size(), nullptr);
-    if (!priv_key_bn) {
+    if (!priv_key_bn)
+    {
         // Gestion des erreurs
         EC_KEY_free(ec_key);
         return PackedByteArray();
     }
 
-    if (!EC_KEY_set_private_key(ec_key, priv_key_bn)) {
+    if (!EC_KEY_set_private_key(ec_key, priv_key_bn))
+    {
         // Gestion des erreurs
         BN_free(priv_key_bn);
         EC_KEY_free(ec_key);
@@ -207,14 +226,16 @@ PackedByteArray OpenSSL::calculate_public_key(const PackedByteArray &private_key
 
     const EC_GROUP *group = EC_KEY_get0_group(ec_key);
     EC_POINT *pub_key_point = EC_POINT_new(group);
-    if (!pub_key_point) {
+    if (!pub_key_point)
+    {
         // Gestion des erreurs
         BN_free(priv_key_bn);
         EC_KEY_free(ec_key);
         return PackedByteArray();
     }
 
-    if (!EC_POINT_mul(group, pub_key_point, priv_key_bn, nullptr, nullptr, nullptr)) {
+    if (!EC_POINT_mul(group, pub_key_point, priv_key_bn, nullptr, nullptr, nullptr))
+    {
         // Gestion des erreurs
         EC_POINT_free(pub_key_point);
         BN_free(priv_key_bn);
@@ -222,7 +243,8 @@ PackedByteArray OpenSSL::calculate_public_key(const PackedByteArray &private_key
         return PackedByteArray();
     }
 
-    if (!EC_KEY_set_public_key(ec_key, pub_key_point)) {
+    if (!EC_KEY_set_public_key(ec_key, pub_key_point))
+    {
         // Gestion des erreurs
         EC_POINT_free(pub_key_point);
         BN_free(priv_key_bn);
@@ -232,7 +254,8 @@ PackedByteArray OpenSSL::calculate_public_key(const PackedByteArray &private_key
 
     // Obtenir la longueur de la clé publique compressée
     size_t compressed_pub_key_len = EC_POINT_point2oct(group, pub_key_point, POINT_CONVERSION_COMPRESSED, nullptr, 0, nullptr);
-    if (compressed_pub_key_len == 0) {
+    if (compressed_pub_key_len == 0)
+    {
         // Gestion des erreurs
         EC_POINT_free(pub_key_point);
         BN_free(priv_key_bn);
@@ -246,7 +269,8 @@ PackedByteArray OpenSSL::calculate_public_key(const PackedByteArray &private_key
     unsigned char *pub_key_data = pub_key_bytes.ptrw();
 
     // Remplir la clé publique compressée
-    if (EC_POINT_point2oct(group, pub_key_point, POINT_CONVERSION_COMPRESSED, pub_key_data, compressed_pub_key_len, nullptr) != compressed_pub_key_len) {
+    if (EC_POINT_point2oct(group, pub_key_point, POINT_CONVERSION_COMPRESSED, pub_key_data, compressed_pub_key_len, nullptr) != compressed_pub_key_len)
+    {
         // Gestion des erreurs
         EC_POINT_free(pub_key_point);
         BN_free(priv_key_bn);
@@ -262,49 +286,44 @@ PackedByteArray OpenSSL::calculate_public_key(const PackedByteArray &private_key
     return pub_key_bytes;
 }
 
-PackedByteArray OpenSSL::sign(const PackedByteArray &priv_key_bytes, const PackedByteArray &data) {
-    // Initialisation de la courbe elliptique
-    EC_KEY *ec_key = EC_KEY_new_by_curve_name(NID_secp256k1);
-    if (!ec_key) {
+// Fonction pour signer les données
+PackedByteArray OpenSSL::sign(const PackedByteArray &private_key_bytes, const PackedByteArray &data)
+{
+    // Créez un contexte secp256k1
+    secp256k1_context *ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN);
+    if (ctx == nullptr)
+    {
         // Gestion des erreurs
         return PackedByteArray();
     }
 
-    // Conversion de la clé privée en BIGNUM
-    BIGNUM *priv_key_bn = BN_bin2bn(priv_key_bytes.ptr(), priv_key_bytes.size(), nullptr);
-    if (!priv_key_bn) {
+    // Préparez les données de la clé privée
+    const unsigned char *priv_key_data = private_key_bytes.ptr();
+
+    // Préparez la structure de la signature avec récupération
+    secp256k1_ecdsa_recoverable_signature sig;
+
+    // Signez les données avec récupération
+    if (!secp256k1_ecdsa_sign_recoverable(ctx, &sig, data.ptr(), priv_key_data, secp256k1_nonce_function_rfc6979, nullptr))
+    {
         // Gestion des erreurs
-        EC_KEY_free(ec_key);
+        secp256k1_context_destroy(ctx);
         return PackedByteArray();
     }
 
-    // Attribution de la clé privée à la structure EC_KEY
-    if (EC_KEY_set_private_key(ec_key, priv_key_bn) != 1) {
-        // Gestion des erreurs
-        BN_free(priv_key_bn);
-        EC_KEY_free(ec_key);
-        return PackedByteArray();
-    }
+    // Sérialisez la signature en format compact
+    unsigned char signature[64];
+    int recid;
+    secp256k1_ecdsa_recoverable_signature_serialize_compact(ctx, signature, &recid, &sig);
 
-    // Signer les données
-    unsigned int sig_len = ECDSA_size(ec_key);
-    PackedByteArray signature;
-    signature.resize(sig_len);
-    unsigned char *sig_data = signature.ptrw();
+    // Nettoyez le contexte
+    secp256k1_context_destroy(ctx);
 
-    if (ECDSA_sign(0, data.ptr(), data.size(), sig_data, &sig_len, ec_key) != 1) {
-        // Gestion des erreurs
-        BN_free(priv_key_bn);
-        EC_KEY_free(ec_key);
-        return PackedByteArray();
-    }
+    // Ajoutez le byte de récupération à la fin de la signature
+    PackedByteArray result;
+    result.resize(65);
+    memcpy(result.ptrw(), signature, 64);
+    result[64] = static_cast<unsigned char>(recid);
 
-    // Redimensionner la signature à la taille réelle
-    signature.resize(sig_len);
-
-    // Nettoyage
-    BN_free(priv_key_bn);
-    EC_KEY_free(ec_key);
-
-    return signature;
+    return result;
 }

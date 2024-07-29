@@ -8,10 +8,12 @@ env = SConscript("godot-cpp/SConstruct")
 # Add source files.
 env.Append(CPPPATH=["/opt/homebrew/opt/openssl@3.3/include"])
 env.Append(LIBPATH=["/opt/homebrew/opt/openssl@3.3/lib"])
+env.Append(CPPPATH=["/opt/homebrew/opt/secp256k1/include"])
+env.Append(LIBPATH=["/opt/homebrew/opt/secp256k1/lib"])
 env.Append(CPPPATH=["src/"])
 
 # Ajoute les bibliothèques OpenSSL à lier
-env.Append(LIBS=["ssl", "crypto"])
+env.Append(LIBS=["ssl", "crypto", "secp256k1"])
 
 sources = Glob("src/*.cpp")
 
